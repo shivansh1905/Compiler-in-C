@@ -24,8 +24,7 @@ string keyword[] = { "int", "real", "bool", "true", "false", "if", "while", "swi
 
 LexicalAnalyzer lexer;
 Token token;
-TokenType tempTokenType;
-int enumType, enumCount = 4;
+int enumCount = 4;
 
 struct sTableEntry {
     string name;
@@ -109,8 +108,8 @@ void Update_Types(int currentType, int newType)
     sTable* temp = symbolTable;
     while(temp->next != NULL){
         if(temp->item->type == currentType){
-            temp->item->type = newType;
-        }
+			temp->item->type = newType;   
+    }
         temp = temp->next;
     }
     if(temp->item->type == currentType){
@@ -171,7 +170,8 @@ bool LexicalAnalyzer::SkipSpace()
 
 bool LexicalAnalyzer::SkipComments()
 {
-    bool comments = false;
+	SkipSpace();    
+	bool comments = false;
     char c;
     if(input.EndOfInput() ){
         input.UngetChar(c);
@@ -196,8 +196,8 @@ bool LexicalAnalyzer::SkipComments()
             SkipComments();
         }else{
             comments = false;
-            cout << "Syntax Error\n";
-            exit(0);
+            input.UngetChar(c);
+			input.UngetChar('/');
         }
         
         
@@ -475,7 +475,7 @@ int parse_varlist(void){
             tempI = parse_varlist();
         }
         else if(token.token_type == COLON){
-            tempTokenType = lexer.UngetToken(token);
+            lexer.UngetToken(token);
         }
         else{
             cout << "\n Syntax Error \n";
@@ -551,7 +551,7 @@ int parse_primary(void){
         return(3);
     }
     else if(token.token_type == FA){
-        return(4);
+        return(3);
     }
     else{
         cout << "\n Syntax Error \n";
@@ -572,35 +572,14 @@ int parse_expression(void){
         tempI = parse_binaryOperator();
         l = parse_expression();
         r = parse_expression();
-        if(l != r || tempI < 15 || tempI > 26){
-            if(tempI >= 15 && tempI <= 18){
-                if(l <= 2 && r > 3){
-                    Update_Types(r, l);
-                    r = l;
-                }
-                else if(l > 3 && r <= 2){
-                    Update_Types(r, l);
-                    l = r;
-                }
-                else if(l > 3 && r > 3){
-                    Update_Types(r, l);
-                    r = l;
-                }
-                else{
-                    cout<<"TYPE MISMATCH "<<token.line_no<<" C2"<<endl;
-                    exit(1);
-                }
+        if(l != r){
+            if(l <= 3 && r > 3){
+                Update_Types(r, l);
+                r = l;
             }
-            else if(tempI >= 19 && tempI <= 26){
-                if(r > 3 && l > 3){
-                    Update_Types(r, l);
-                    r = l;
-                    return(3);
-                }
-                else{
-                    cout<<"TYPE MISMATCH "<<token.line_no<<" C2"<<endl;
-                    exit(1);
-                }
+            else if(l > 3){
+                Update_Types(l, r);
+                l = r;
             }
             else{
                 cout<<"TYPE MISMATCH "<<token.line_no<<" C2"<<endl;
@@ -618,10 +597,14 @@ int parse_expression(void){
         lexer.UngetToken(token);
         tempI = parse_unaryOperator();
         tempI = parse_expression();
-        if(tempI != 3){
+        if(tempI < 3){
             cout<<"TYPE MISMATCH "<<token.line_no<<" C3"<<endl;
             exit(1);
         }
+		else if(tempI > 3) {
+			Update_Types(tempI, 3);
+			tempI = 3;
+		}
     }
     else{
         cout << "\n Syntax Error \n";
@@ -644,7 +627,7 @@ int parse_assstmt(void){
                 RHS = parse_expression();
                 if(LHS >= 1 && LHS <= 3) {
                     if(LHS != RHS) {
-                        if(LHS < 3) {
+                        if(RHS <= 3) {
                             cout<<"TYPE MISMATCH "<<token.line_no<<" C1"<<endl;
                             exit(1);
                         }
@@ -660,7 +643,7 @@ int parse_assstmt(void){
                 }
                 token = lexer.GetToken();
                 if(token.token_type != SEMICOLON){
-                    cout << "\n HI Syntax Error " << token.token_type << " \n";    
+                    cout << "\n Syntax Error " << token.token_type << " \n";    
                 }
             }
             else{
@@ -705,15 +688,15 @@ int parse_caselist(void){
     int tempI;
     token = lexer.GetToken();
     if(token.token_type == CASE){
-        tempTokenType = lexer.UngetToken(token);
+        lexer.UngetToken(token);
         tempI = parse_case();
         token = lexer.GetToken();
         if(token.token_type == CASE){
-            tempTokenType = lexer.UngetToken(token);
+            lexer.UngetToken(token);
             tempI = parse_caselist();
         }
         else if(token.token_type == RBRACE){
-            tempTokenType = lexer.UngetToken(token);
+            lexer.UngetToken(token);
         }
     }
     return(0);
@@ -731,6 +714,9 @@ int parse_switchstmt(void){
                 cout<<"TYPE MISMATCH "<<token.line_no<<" C5"<<endl;
                 exit(1);
             }
+			else if(tempI > 3) {
+				Update_Types(tempI, 1);
+			}
             token = lexer.GetToken();
             if(token.token_type == RPAREN){
                 token = lexer.GetToken();
@@ -766,10 +752,13 @@ int parse_whilestmt(void){
         token = lexer.GetToken();
         if(token.token_type == LPAREN){
             tempI = parse_expression();
-            if(tempI != 3){
+            if(tempI < 3){
                 cout<<"TYPE MISMATCH "<<token.line_no<<" C4"<<endl;
                 exit(1);
             }
+			else if(tempI > 3) {
+				Update_Types(tempI, 3);
+			}
             token = lexer.GetToken();
             if(token.token_type == RPAREN){
                 tempI = parse_body();
@@ -795,10 +784,13 @@ int parse_ifstmt(void){
         token = lexer.GetToken();
         if(token.token_type == LPAREN){
             tempI = parse_expression();
-            if(tempI != 3){
+            if(tempI < 3){
                 cout<<"TYPE MISMATCH "<<token.line_no<<" C4"<<endl;
                 exit(1);
             }
+			else if(tempI > 3) {
+				Update_Types(tempI, 3);
+			}
             token = lexer.GetToken();
             if(token.token_type == RPAREN){
                 tempI = parse_body();   
@@ -821,19 +813,19 @@ int parse_stmt(void){
     int tempI;
     token = lexer.GetToken();
     if(token.token_type == ID){
-        tempTokenType = lexer.UngetToken(token);
+        lexer.UngetToken(token);
         tempI = parse_assstmt();
     }
     else if(token.token_type == IF){
-        tempTokenType = lexer.UngetToken(token);
+        lexer.UngetToken(token);
         tempI = parse_ifstmt();
     }
     else if(token.token_type == WHILE){
-        tempTokenType = lexer.UngetToken(token);
+        lexer.UngetToken(token);
         tempI = parse_whilestmt();
     }
     else if(token.token_type == SWITCH){
-        tempTokenType = lexer.UngetToken(token);
+        lexer.UngetToken(token);
         tempI = parse_switchstmt();
     }
     else{
@@ -846,15 +838,15 @@ int parse_stmtlist(void){
     token = lexer.GetToken();
     int tempI;
     if(token.token_type == ID || token.token_type == IF || token.token_type == WHILE || token.token_type == SWITCH){
-        tempTokenType = lexer.UngetToken(token);
+        lexer.UngetToken(token);
         tempI = parse_stmt();
         token = lexer.GetToken();
         if(token.token_type == ID || token.token_type == IF || token.token_type == WHILE || token.token_type == SWITCH){
-            tempTokenType = lexer.UngetToken(token);
+            lexer.UngetToken(token);
             tempI = parse_stmtlist();
         }
         else if (token.token_type == RBRACE){
-            tempTokenType = lexer.UngetToken(token);
+            lexer.UngetToken(token);
         }
     }
     else{
@@ -874,7 +866,7 @@ int parse_body(void){
         }        
     }
     else if(token.token_type == END_OF_FILE){
-        tempTokenType = lexer.UngetToken(token);
+        lexer.UngetToken(token);
     }
     else{
         cout << "\n Syntax Error \n ";
@@ -897,7 +889,7 @@ int parse_vardecl(void){
     int tempI;
     token = lexer.GetToken();
     if(token.token_type == ID){
-        tempTokenType = lexer.UngetToken(token);
+        lexer.UngetToken(token);
         tempI = parse_varlist();
         token = lexer.GetToken();
         if(token.token_type == COLON){
@@ -922,11 +914,11 @@ int parse_vardecllist(void){
     int tempI;    
     token = lexer.GetToken();
     while(token.token_type == ID){
-        tempTokenType = lexer.UngetToken(token);
+        lexer.UngetToken(token);
         tempI = parse_vardecl();
         token = lexer.GetToken();
     }
-    tempTokenType = lexer.UngetToken(token);
+    lexer.UngetToken(token);
     return(0);
 }
 
@@ -935,7 +927,7 @@ int parse_globalVars(void){
     token = lexer.GetToken();
     int tempI;
     if(token.token_type == ID){
-        tempTokenType = lexer.UngetToken(token);
+        lexer.UngetToken(token);
         tempI = parse_vardecllist();
     }
     else{
@@ -950,12 +942,12 @@ int parse_program(void){
     while (token.token_type != END_OF_FILE)
     {
         if(token.token_type == ID){
-            tempTokenType = lexer.UngetToken(token);
+            lexer.UngetToken(token);
             tempI = parse_globalVars();
             tempI = parse_body();
         }
         else if(token.token_type == LBRACE){
-            tempTokenType = lexer.UngetToken(token);
+            lexer.UngetToken(token);
             tempI = parse_body();
         }
         else if(token.token_type == END_OF_FILE){
@@ -1028,6 +1020,6 @@ void printList(void)
 
 int main()
 {
-    int i;
-    i = parse_program();
+    parse_program();
+	printList();
 }
